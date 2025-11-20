@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to Word Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 50px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .upload-area {
+            border: 3px dashed #007bff;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            background: #f8f9ff;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            background: #e3f2fd;
+            border-color: #0056b3;
+        }
+
+        .upload-area p {
+            margin: 10px 0;
+            color: #666;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: not-allowed;
+            margin-bottom: 20px;
+        }
+
+        button.active {
+            background: #007bff;
+            cursor: pointer;
+        }
+
+        button.active:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .progress {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+            color: #495057;
+        }
+
+        .pricing {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #007bff;
+        }
+
+        .pricing h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .pricing-options {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .plan {
+            flex: 1;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #dee2e6;
+        }
+
+        .plan h4 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .price {
+            font-size: 20px;
+            font-weight: bold;
+            color: #007bff;
+            margin: 10px 0;
+        }
+
+        .plan button {
+            background: #28a745;
+            padding: 8px 15px;
+            width: auto;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 PDF to Word Converter</h1>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>Нажми сюда чтобы выбрать PDF файл</p>
+            <p>ИЛИ перетащи файл в эту область</p>
+            <input type="file" id="fileInput" accept=".pdf">
+        </div>
+
+        <div class="progress" id="progress">
+            <p>⏳ Конвертируем... Подождите...</p>
+        </div>
+
+        <button id="convertBtn">Конвертировать в Word</button>
+
+        <div class="pricing" id="pricing">
+            <h3>💎 Премиум функции</h3>
+            <p>Бесплатно: 1 страница. Для большего - нужна подписка:</p>
+            
+            <div class="pricing-options">
+                <div class="plan">
+                    <h4>📦 10 страниц</h4>
+                    <p class="price">$3</p>
+                    <button onclick="buyPlan(10)">Купить</button>
+                </div>
+                <div class="plan">
+                    <h4>🚀 50 страниц</h4>
+                    <p class="price">$10</p>
+                    <button onclick="buyPlan(50)">Купить</button>
+                </div>
+                <div class="plan">
+                    <h4>💫 Безлимит</h4>
+                    <p class="price">$20</p>
+                    <button onclick="buyPlan(999)">Купить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    
+    <script>
+        // Настройки PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        // Элементы страницы
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const convertBtn = document.getElementById('convertBtn');
+        const progress = document.getElementById('progress');
+        const pricing = document.getElementById('pricing');
+
+        // Монетизация
+        let remainingPages = 1;
+        let currentFile = null;
+
+        // Клик по области загрузки
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Выбор файла
+        fileInput.addEventListener('change', function() {
+            const file = fileInput.files[0];
+            
+            if (file && file.type === 'application/pdf') {
+                currentFile = file;
+                convertBtn.classList.add('active');
+                convertBtn.disabled = false;
+                
+                uploadArea.innerHTML = `
+                    <p>✅ Файл выбран:</p>
+                    <p><strong>${file.name}</strong></p>
+                    <p><small>Нажми "Конвертировать в Word"</small></p>
+                `;
+            }
+        });
+
+        // Drag and Drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#e3f2fd';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.background = '#f8f9ff';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#f8f9ff';
+            
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/pdf') {
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+                
+                currentFile = file;
+                convertBtn.classList.add('active');
+                convertBtn.disabled = false;
+                
+                uploadArea.innerHTML = `
+                    <p>✅ Файл выбран:</p>
+                    <p><strong>${file.name}</strong></p>
+                    <p><small>Нажми "Конвертировать в Word"</small></p>
+                `;
+            }
+        });
+
+        // Функции монетизации
+        function showPricing() {
+            pricing.style.display = 'block';
+        }
+
+        function buyPlan(pages) {
+            remainingPages += pages;
+            alert(`✅ Спасибо за покупку! Теперь у вас ${remainingPages} страниц для конвертации.`);
+            pricing.style.display = 'none';
+            startConversion();
+        }
+
+        // Основная функция
+        convertBtn.addEventListener('click', async function() {
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Сначала выберите PDF файл!');
+                return;
+            }
+
+            const fileURL = URL.createObjectURL(file);
+            const pdf = await pdfjsLib.getDocument(fileURL).promise;
+            
+            if (pdf.numPages > remainingPages) {
+                showPricing();
+                URL.revokeObjectURL(fileURL);
+                return;
+            }
+            
+            startConversion();
+        });
+
+        async function startConversion() {
+            const file = currentFile;
+            if (!file) return;
+
+            progress.style.display = 'block';
+            convertBtn.disabled = true;
+            convertBtn.textContent = 'Конвертируем...';
+            convertBtn.classList.remove('active');
+
+            try {
+                const fileURL = URL.createObjectURL(file);
+                const pdf = await pdfjsLib.getDocument(fileURL).promise;
+                let fullText = '';
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 2.0 });
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ 
+                        canvasContext: context, 
+                        viewport: viewport 
+                    }).promise;
+
+                    const { data: { text } } = await Tesseract.recognize(
+                        canvas,
+                        'eng+rus'
+                    );
+
+                    fullText += text + '\n\n';
+                }
+
+                const blob = new Blob([fullText], { 
+                    type: 'application/msword' 
+                });
+                
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = file.name.replace('.pdf', '.doc');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                remainingPages -= pdf.numPages;
+                alert('✅ Конвертация завершена! Файл скачан.');
+                
+            } catch (error) {
+                alert('❌ Ошибка: ' + error.message);
+            } finally {
+                progress.style.display = 'none';
+                convertBtn.disabled = false;
+                convertBtn.textContent = 'Конвертировать в Word';
+                if (remainingPages > 0) {
+                    convertBtn.classList.add('active');
+                }
+            }
+        }
+
+        console.log('PDF конвертер готов!');
+    </script>
+</body>
+</html>
